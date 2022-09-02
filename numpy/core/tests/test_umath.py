@@ -27,12 +27,17 @@ def on_powerpc():
 
 
 def bad_arcsinh():
-    """The blocklisted trig functions are not accurate on aarch64 for
+    """The blocklisted trig functions are not accurate on aarch64/PPC for
     complex256. Rather than dig through the actual problem skip the
     test. This should be fixed when we can move past glibc2.17
     which is the version in manylinux2014
     """
-    x = 1.78e-10
+    if platform.machine() == 'aarch64':
+        x = 1.78e-10
+    elif on_powerpc():
+        x = 2.16e-10
+    else:
+        return False
     v1 = np.arcsinh(np.float128(x))
     v2 = np.arcsinh(np.complex256(x)).real
     # The eps for float128 is 1-e33, so this is way bigger
@@ -1052,7 +1057,7 @@ class TestSpecialFloats:
         with np.errstate(under='raise', over='raise'):
             x = [np.nan,  np.nan, np.inf, 0.]
             y = [np.nan, -np.nan, np.inf, -np.inf]
-            for dt in ['f', 'd', 'g']:
+            for dt in ['e', 'f', 'd', 'g']:
                 xf = np.array(x, dtype=dt)
                 yf = np.array(y, dtype=dt)
                 assert_equal(np.exp(yf), xf)
@@ -1064,12 +1069,14 @@ class TestSpecialFloats:
     )
     def test_exp_exceptions(self):
         with np.errstate(over='raise'):
+            assert_raises(FloatingPointError, np.exp, np.float16(11.0899))
             assert_raises(FloatingPointError, np.exp, np.float32(100.))
             assert_raises(FloatingPointError, np.exp, np.float32(1E19))
             assert_raises(FloatingPointError, np.exp, np.float64(800.))
             assert_raises(FloatingPointError, np.exp, np.float64(1E19))
 
         with np.errstate(under='raise'):
+            assert_raises(FloatingPointError, np.exp, np.float16(-17.5))
             assert_raises(FloatingPointError, np.exp, np.float32(-1000.))
             assert_raises(FloatingPointError, np.exp, np.float32(-1E19))
             assert_raises(FloatingPointError, np.exp, np.float64(-1000.))
@@ -1080,7 +1087,7 @@ class TestSpecialFloats:
             x = [np.nan, np.nan, np.inf, np.nan, -np.inf, np.nan]
             y = [np.nan, -np.nan, np.inf, -np.inf, 0.0, -1.0]
             y1p = [np.nan, -np.nan, np.inf, -np.inf, -1.0, -2.0]
-            for dt in ['f', 'd', 'g']:
+            for dt in ['e', 'f', 'd', 'g']:
                 xf = np.array(x, dtype=dt)
                 yf = np.array(y, dtype=dt)
                 yf1p = np.array(y1p, dtype=dt)
@@ -1090,7 +1097,7 @@ class TestSpecialFloats:
                 assert_equal(np.log1p(yf1p), xf)
 
         with np.errstate(divide='raise'):
-            for dt in ['f', 'd']:
+            for dt in ['e', 'f', 'd']:
                 assert_raises(FloatingPointError, np.log,
                               np.array(0.0, dtype=dt))
                 assert_raises(FloatingPointError, np.log2,
@@ -1101,7 +1108,7 @@ class TestSpecialFloats:
                               np.array(-1.0, dtype=dt))
 
         with np.errstate(invalid='raise'):
-            for dt in ['f', 'd']:
+            for dt in ['e', 'f', 'd']:
                 assert_raises(FloatingPointError, np.log,
                               np.array(-np.inf, dtype=dt))
                 assert_raises(FloatingPointError, np.log,
@@ -1128,19 +1135,21 @@ class TestSpecialFloats:
         with np.errstate(all='ignore'):
             x = [np.nan, np.nan, np.nan, np.nan]
             y = [np.nan, -np.nan, np.inf, -np.inf]
-            for dt in ['f', 'd', 'g']:
+            for dt in ['e', 'f', 'd', 'g']:
                 xf = np.array(x, dtype=dt)
                 yf = np.array(y, dtype=dt)
                 assert_equal(np.sin(yf), xf)
                 assert_equal(np.cos(yf), xf)
+        
 
         with np.errstate(invalid='raise'):
-            assert_raises(FloatingPointError, np.sin, np.float32(-np.inf))
-            assert_raises(FloatingPointError, np.sin, np.float32(np.inf))
-            assert_raises(FloatingPointError, np.cos, np.float32(-np.inf))
-            assert_raises(FloatingPointError, np.cos, np.float32(np.inf))
+            for callable in [np.sin, np.cos]:
+                for value in [np.inf, -np.inf]:
+                    for dt in ['e', 'f', 'd']:
+                        assert_raises(FloatingPointError, callable,
+                                np.array([value], dtype=dt))
 
-    @pytest.mark.parametrize('dt', ['f', 'd', 'g'])
+    @pytest.mark.parametrize('dt', ['e', 'f', 'd', 'g'])
     def test_sqrt_values(self, dt):
         with np.errstate(all='ignore'):
             x = [np.nan, np.nan, np.inf, np.nan, 0.]
@@ -1157,7 +1166,7 @@ class TestSpecialFloats:
     def test_abs_values(self):
         x = [np.nan,  np.nan, np.inf, np.inf, 0., 0., 1.0, 1.0]
         y = [np.nan, -np.nan, np.inf, -np.inf, 0., -0., -1.0, 1.0]
-        for dt in ['f', 'd', 'g']:
+        for dt in ['e', 'f', 'd', 'g']:
             xf = np.array(x, dtype=dt)
             yf = np.array(y, dtype=dt)
             assert_equal(np.abs(yf), xf)
@@ -1166,12 +1175,14 @@ class TestSpecialFloats:
         x = [np.nan,  np.nan, np.inf, np.inf]
         y = [np.nan, -np.nan, np.inf, -np.inf]
         with np.errstate(all='ignore'):
-            for dt in ['f', 'd', 'g']:
+            for dt in ['e', 'f', 'd', 'g']:
                 xf = np.array(x, dtype=dt)
                 yf = np.array(y, dtype=dt)
                 assert_equal(np.square(yf), xf)
 
         with np.errstate(over='raise'):
+            assert_raises(FloatingPointError, np.square,
+                          np.array(1E3, dtype='e'))
             assert_raises(FloatingPointError, np.square,
                           np.array(1E32, dtype='f'))
             assert_raises(FloatingPointError, np.square,
@@ -1181,13 +1192,13 @@ class TestSpecialFloats:
         with np.errstate(all='ignore'):
             x = [np.nan,  np.nan, 0.0, -0.0, np.inf, -np.inf]
             y = [np.nan, -np.nan, np.inf, -np.inf, 0., -0.]
-            for dt in ['f', 'd', 'g']:
+            for dt in ['e', 'f', 'd', 'g']:
                 xf = np.array(x, dtype=dt)
                 yf = np.array(y, dtype=dt)
                 assert_equal(np.reciprocal(yf), xf)
 
         with np.errstate(divide='raise'):
-            for dt in ['f', 'd', 'g']:
+            for dt in ['e', 'f', 'd', 'g']:
                 assert_raises(FloatingPointError, np.reciprocal,
                               np.array(-0.0, dtype=dt))
 
@@ -1195,13 +1206,13 @@ class TestSpecialFloats:
         with np.errstate(all='ignore'):
             in_ = [np.nan, -np.nan, 0.0, -0.0, np.inf, -np.inf]
             out = [np.nan, np.nan, 0.0, -0.0, np.nan, np.nan]
-            for dt in ['f', 'd']:
+            for dt in ['e', 'f', 'd']:
                 in_arr = np.array(in_, dtype=dt)
                 out_arr = np.array(out, dtype=dt)
                 assert_equal(np.tan(in_arr), out_arr)
 
         with np.errstate(invalid='raise'):
-            for dt in ['f', 'd']:
+            for dt in ['e', 'f', 'd']:
                 assert_raises(FloatingPointError, np.tan,
                               np.array(np.inf, dtype=dt))
                 assert_raises(FloatingPointError, np.tan,
@@ -1211,7 +1222,7 @@ class TestSpecialFloats:
         with np.errstate(all='ignore'):
             in_ = [np.nan, -np.nan, np.inf, -np.inf]
             out = [np.nan, np.nan, np.nan, np.nan]
-            for dt in ['f', 'd']:
+            for dt in ['e', 'f', 'd']:
                 in_arr = np.array(in_, dtype=dt)
                 out_arr = np.array(out, dtype=dt)
                 assert_equal(np.arcsin(in_arr), out_arr)
@@ -1219,7 +1230,7 @@ class TestSpecialFloats:
 
         for callable in [np.arcsin, np.arccos]:
             for value in [np.inf, -np.inf, 2.0, -2.0]:
-                for dt in ['f', 'd']:
+                for dt in ['e', 'f', 'd']:
                     with np.errstate(invalid='raise'):
                         assert_raises(FloatingPointError, callable,
                                       np.array(value, dtype=dt))
@@ -1228,7 +1239,7 @@ class TestSpecialFloats:
         with np.errstate(all='ignore'):
             in_ = [np.nan, -np.nan]
             out = [np.nan, np.nan]
-            for dt in ['f', 'd']:
+            for dt in ['e', 'f', 'd']:
                 in_arr = np.array(in_, dtype=dt)
                 out_arr = np.array(out, dtype=dt)
                 assert_equal(np.arctan(in_arr), out_arr)
@@ -1236,12 +1247,14 @@ class TestSpecialFloats:
     def test_sinh(self):
         in_ = [np.nan, -np.nan, np.inf, -np.inf]
         out = [np.nan, np.nan, np.inf, -np.inf]
-        for dt in ['f', 'd']:
+        for dt in ['e', 'f', 'd']:
             in_arr = np.array(in_, dtype=dt)
             out_arr = np.array(out, dtype=dt)
             assert_equal(np.sinh(in_arr), out_arr)
 
         with np.errstate(over='raise'):
+            assert_raises(FloatingPointError, np.sinh,
+                          np.array(12.0, dtype='e'))
             assert_raises(FloatingPointError, np.sinh,
                           np.array(120.0, dtype='f'))
             assert_raises(FloatingPointError, np.sinh,
@@ -1250,12 +1263,14 @@ class TestSpecialFloats:
     def test_cosh(self):
         in_ = [np.nan, -np.nan, np.inf, -np.inf]
         out = [np.nan, np.nan, np.inf, np.inf]
-        for dt in ['f', 'd']:
+        for dt in ['e', 'f', 'd']:
             in_arr = np.array(in_, dtype=dt)
             out_arr = np.array(out, dtype=dt)
             assert_equal(np.cosh(in_arr), out_arr)
 
         with np.errstate(over='raise'):
+            assert_raises(FloatingPointError, np.cosh,
+                          np.array(12.0, dtype='e'))
             assert_raises(FloatingPointError, np.cosh,
                           np.array(120.0, dtype='f'))
             assert_raises(FloatingPointError, np.cosh,
@@ -1264,7 +1279,7 @@ class TestSpecialFloats:
     def test_tanh(self):
         in_ = [np.nan, -np.nan, np.inf, -np.inf]
         out = [np.nan, np.nan, 1.0, -1.0]
-        for dt in ['f', 'd']:
+        for dt in ['e', 'f', 'd']:
             in_arr = np.array(in_, dtype=dt)
             out_arr = np.array(out, dtype=dt)
             assert_equal(np.tanh(in_arr), out_arr)
@@ -1272,7 +1287,7 @@ class TestSpecialFloats:
     def test_arcsinh(self):
         in_ = [np.nan, -np.nan, np.inf, -np.inf]
         out = [np.nan, np.nan, np.inf, -np.inf]
-        for dt in ['f', 'd']:
+        for dt in ['e', 'f', 'd']:
             in_arr = np.array(in_, dtype=dt)
             out_arr = np.array(out, dtype=dt)
             assert_equal(np.arcsinh(in_arr), out_arr)
@@ -1281,14 +1296,14 @@ class TestSpecialFloats:
         with np.errstate(all='ignore'):
             in_ = [np.nan, -np.nan, np.inf, -np.inf, 1.0, 0.0]
             out = [np.nan, np.nan, np.inf, np.nan, 0.0, np.nan]
-            for dt in ['f', 'd']:
+            for dt in ['e', 'f', 'd']:
                 in_arr = np.array(in_, dtype=dt)
                 out_arr = np.array(out, dtype=dt)
                 assert_equal(np.arccosh(in_arr), out_arr)
 
         for value in [0.0, -np.inf]:
             with np.errstate(invalid='raise'):
-                for dt in ['f', 'd']:
+                for dt in ['e', 'f', 'd']:
                     assert_raises(FloatingPointError, np.arccosh,
                                   np.array(value, dtype=dt))
 
@@ -1296,14 +1311,14 @@ class TestSpecialFloats:
         with np.errstate(all='ignore'):
             in_ = [np.nan, -np.nan, np.inf, -np.inf, 1.0, -1.0, 2.0]
             out = [np.nan, np.nan, np.nan, np.nan, np.inf, -np.inf, np.nan]
-            for dt in ['f', 'd']:
+            for dt in ['e', 'f', 'd']:
                 in_arr = np.array(in_, dtype=dt)
                 out_arr = np.array(out, dtype=dt)
                 assert_equal(np.arctanh(in_arr), out_arr)
 
         for value in [1.01, np.inf, -np.inf, 1.0, -1.0]:
             with np.errstate(invalid='raise', divide='raise'):
-                for dt in ['f', 'd']:
+                for dt in ['e', 'f', 'd']:
                     assert_raises(FloatingPointError, np.arctanh,
                                   np.array(value, dtype=dt))
 
@@ -1316,14 +1331,14 @@ class TestSpecialFloats:
         with np.errstate(all='ignore'):
             in_ = [np.nan, -np.nan, np.inf, -np.inf]
             out = [np.nan, np.nan, np.inf, 0.0]
-            for dt in ['f', 'd']:
+            for dt in ['e', 'f', 'd']:
                 in_arr = np.array(in_, dtype=dt)
                 out_arr = np.array(out, dtype=dt)
                 assert_equal(np.exp2(in_arr), out_arr)
 
         for value in [2000.0, -2000.0]:
             with np.errstate(over='raise', under='raise'):
-                for dt in ['f', 'd']:
+                for dt in ['e', 'f', 'd']:
                     assert_raises(FloatingPointError, np.exp2,
                                   np.array(value, dtype=dt))
 
@@ -1331,15 +1346,27 @@ class TestSpecialFloats:
         with np.errstate(all='ignore'):
             in_ = [np.nan, -np.nan, np.inf, -np.inf]
             out = [np.nan, np.nan, np.inf, -1.0]
-            for dt in ['f', 'd']:
+            for dt in ['e', 'f', 'd']:
                 in_arr = np.array(in_, dtype=dt)
                 out_arr = np.array(out, dtype=dt)
                 assert_equal(np.expm1(in_arr), out_arr)
 
         for value in [200.0, 2000.0]:
             with np.errstate(over='raise'):
-                assert_raises(FloatingPointError, np.expm1,
-                              np.array(value, dtype='f'))
+                for dt in ['e', 'f']:
+                    assert_raises(FloatingPointError, np.expm1,
+                                  np.array(value, dtype=dt))
+
+    # test to ensure no spurious FP exceptions are raised due to SIMD
+    def test_spurious_fpexception(self):
+        for dt in ['e', 'f', 'd']:
+            arr = np.array([1.0, 2.0], dtype=dt)
+            with assert_no_warnings():
+                np.log(arr)
+                np.log2(arr)
+                np.log10(arr)
+                np.arccosh(arr)
+
 
 class TestFPClass:
     @pytest.mark.parametrize("stride", [-4,-2,-1,1,2,4])
@@ -3569,10 +3596,10 @@ class TestComplexFunctions:
         x_basic = np.logspace(-2.999, 0, 10, endpoint=False)
 
         if dtype is np.longcomplex:
-            if (platform.machine() == 'aarch64' and bad_arcsinh()):
+            if bad_arcsinh():
                 pytest.skip("Trig functions of np.longcomplex values known "
-                            "to be inaccurate on aarch64 for some compilation "
-                            "configurations.")
+                            "to be inaccurate on aarch64 and PPC for some "
+                            "compilation configurations.")
             # It's not guaranteed that the system-provided arc functions
             # are accurate down to a few epsilons. (Eg. on Linux 64-bit)
             # So, give more leeway for long complex tests here:
